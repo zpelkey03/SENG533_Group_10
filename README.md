@@ -10,5 +10,5 @@ docker-compose -f .\docker-compose_default.yaml up
 
 Stop the running container with
 ```
-docker-compose -f .\docker-compose_default.yaml up
+docker-compose -f .\docker-compose_default.yaml down
 ```
