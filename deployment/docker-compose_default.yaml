@@ -4,12 +4,22 @@ services:
     image: descartesresearch/teastore-registry
     expose:
       - "8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   db:
     image: descartesresearch/teastore-db
     expose:
       - "3306"
     # ports:
     #   - "3306:3306"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   persistence:
     image: descartesresearch/teastore-persistence
     expose:
@@ -19,6 +29,11 @@ services:
       REGISTRY_HOST: "registry"
       DB_HOST: "db"
       DB_PORT: "3306"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   auth:
     image: descartesresearch/teastore-auth
     expose:
@@ -26,6 +41,11 @@ services:
     environment:
       HOST_NAME: "auth"
       REGISTRY_HOST: "registry"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   image:
     image: descartesresearch/teastore-image
     expose:
@@ -33,6 +53,11 @@ services:
     environment:
       HOST_NAME: "image"
       REGISTRY_HOST: "registry"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   recommender:
     image: descartesresearch/teastore-recommender
     expose:
@@ -40,6 +65,11 @@ services:
     environment:
       HOST_NAME: "recommender"
       REGISTRY_HOST: "registry"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
   webui:
     image: descartesresearch/teastore-webui
     expose:
@@ -49,3 +79,8 @@ services:
       REGISTRY_HOST: "registry"
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-0.5}'
+          memory: ${MEMORY:-256M}
