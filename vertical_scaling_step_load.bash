@@ -4,6 +4,8 @@ CYBERA_IP="10.1.6.21"
 JMETER_PATH=~/apache-jmeter-5.6.3/bin/jmeter
 DURATION=180 # 3 minutes per step is enough for Phase 1
 
+mkdir -p ./results
+
 # Phase 1: Vertical Scaling Matrix
 experiments=(
     "run1 1.0 4g"
@@ -31,9 +33,9 @@ for exp in "${experiments[@]}"; do
     for class in "${classes[@]}"; do
         for users in "${user_steps[@]}"; do
             echo "TESTING: $run | CLASS: $class | USERS: $users"
-
-            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "nohup ~/monitor.sh docker_stats_${PREFIX}.csv > /dev/null 2>&1 & echo \$!" > current_monitor_pid.txt
-            MONITOR_PID=$(cat current_monitor_pid.txt)
+	    
+	    PREFIX="${run}_${class}_U${users}"
+            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "nohup ~/SENG533_Group_10/monitor.sh docker_stats_${PREFIX}.csv </dev/null >/dev/null 2>&1 &"
 
             # Use -l to create a unique log for EVERY step
             $JMETER_PATH -n -t class_${class}.jmx \
@@ -41,10 +43,13 @@ for exp in "${experiments[@]}"; do
                 -JnumUser=$users \
                 -JrampUp=10 \
                 -Jduration=$DURATION \
-                -l results_${run}_${class}_U${users}.jtl
+		-Jport=8080 \
+                -l ./results/jmeter_results_${run}_${class}_U${users}.jtl
 
-            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "kill $MONITOR_PID"
-            rm current_monitor_pid.txt
+            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "pkill -f monitor.sh"
+
+	    scp -i ~/will_teastore_key.key ubuntu@$CYBERA_IP:~/docker_stats_${PREFIX}.csv ./results/
+	    ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "rm ~/docker_stats_${PREFIX}.csv"
 
             echo "Cooling down..."
             sleep 20
