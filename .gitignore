@@ -418,3 +418,8 @@ FodyWeavers.xsd
 *.msp
 
 *.key
+
+*.jtl
+*.tmp
+
+results/*
