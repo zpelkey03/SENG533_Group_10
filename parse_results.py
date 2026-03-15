@@ -32,20 +32,56 @@ def parse_jtl(file_path):
         return None
 
 def parse_docker_stats(file_path):
-    """Extracts average CPU utilization per container from the monitor CSV."""
+    """Extracts average CPU and Memory utilization (Percentages) per container."""
     try:
         df = pd.read_csv(file_path)
         if df.empty:
             return {}
         
-        # Clean the CPU percentage string (e.g., "15.4%" -> 15.4)
+        # Clean CPU (e.g., "15.4%" -> 15.4)
         df['CPU_Perc'] = df['CPU_Perc'].astype(str).str.replace('%', '').astype(float)
         
-        # Group by container name and get the mean CPU usage over the run
-        cpu_means = df.groupby('Container')['CPU_Perc'].mean().to_dict()
+        # Calculate Memory Percentage from string like "150.5MiB / 4GiB"
+        def calc_mem_perc(mem_str):
+            try:
+                parts = str(mem_str).split('/')
+                if len(parts) != 2:
+                    return 0.0
+                
+                def to_mb(s):
+                    s = s.strip()
+                    val_str = ''.join(c for c in s if c.isdigit() or c == '.')
+                    if not val_str: return 0.0
+                    val = float(val_str)
+                    
+                    if 'GiB' in s or 'GB' in s: return val * 1024
+                    elif 'KiB' in s or 'KB' in s: return val / 1024
+                    elif s.endswith('B') and not any(x in s for x in ['MiB', 'MB', 'GiB', 'GB', 'KiB', 'KB']): return val / (1024 * 1024)
+                    return val
+                
+                usage_mb = to_mb(parts[0])
+                limit_mb = to_mb(parts[1])
+                
+                if limit_mb > 0:
+                    return (usage_mb / limit_mb) * 100
+                return 0.0
+            except:
+                return 0.0
+
+        df['Mem_Perc'] = df['Mem_Usage'].apply(calc_mem_perc)
         
-        # Format keys to be column-friendly
-        return {f"{k}_CPU_%": round(v, 2) for k, v in cpu_means.items()}
+        # Get the mean usage over the run
+        cpu_means = df.groupby('Container')['CPU_Perc'].mean().to_dict()
+        mem_means = df.groupby('Container')['Mem_Perc'].mean().to_dict()
+        
+        # Format keys for the master CSV
+        result = {}
+        for k, v in cpu_means.items():
+            result[f"{k}_CPU_%"] = round(v, 2)
+        for k, v in mem_means.items():
+            result[f"{k}_Mem_%"] = round(v, 2) # Now correctly tagged as a percentage
+            
+        return result
     except Exception as e:
         print(f"Error parsing Docker CSV {file_path}: {e}")
         return {}
@@ -58,7 +94,7 @@ def generate_network_visualizations(df, output_dir):
     for workload in classes:
         class_data = df[df['Workload_Class'] == workload]
 
-        # Throughput Graph
+        # Throughput
         plt.figure(figsize=(10, 6))
         sns.lineplot(data=class_data, x='Concurrent_Users', y='Throughput_RPS', hue='Hardware_Config', marker='o', linewidth=2)
         plt.title(f"Throughput Saturation - {workload.capitalize()} Class", fontsize=14, pad=15)
@@ -69,7 +105,7 @@ def generate_network_visualizations(df, output_dir):
         plt.savefig(os.path.join(output_dir, f"{workload}_throughput.png"), dpi=300)
         plt.close()
 
-        # Latency Graph
+        # Latency
         plt.figure(figsize=(10, 6))
         sns.lineplot(data=class_data, x='Concurrent_Users', y='Avg_Latency_ms', hue='Hardware_Config', marker='s', linewidth=2)
         plt.title(f"Latency Spikes - {workload.capitalize()} Class", fontsize=14, pad=15)
@@ -80,13 +116,15 @@ def generate_network_visualizations(df, output_dir):
         plt.savefig(os.path.join(output_dir, f"{workload}_latency.png"), dpi=300)
         plt.close()
 
-def generate_cpu_visualizations(df, output_dir):
-    """Generates CPU utilization graphs for the Docker containers."""
+def generate_resource_visualizations(df, output_dir, resource_type):
+    """Generates utilization percentage graphs for either CPU or Memory."""
     sns.set_theme(style="whitegrid")
     
-    # Identify all columns that represent a container's CPU usage
-    cpu_columns = [col for col in df.columns if col.endswith('_CPU_%')]
-    if not cpu_columns:
+    # Target either '_CPU_%' or '_Mem_%' columns
+    target_suffix = '_CPU_%' if resource_type == 'CPU' else '_Mem_%'
+    columns = [col for col in df.columns if col.endswith(target_suffix)]
+    
+    if not columns:
         return
 
     hardware_runs = df['Hardware_Config'].unique()
@@ -94,31 +132,24 @@ def generate_cpu_visualizations(df, output_dir):
 
     for run in hardware_runs:
         for workload in classes:
-            # Filter data for this specific run and workload
             subset = df[(df['Hardware_Config'] == run) & (df['Workload_Class'] == workload)]
             if subset.empty:
                 continue
 
             plt.figure(figsize=(10, 6))
             
-            # Plot a line for each microservice container
-            for col in cpu_columns:
-                container_name = col.replace('_CPU_%', '')
+            for col in columns:
+                container_name = col.replace(target_suffix, '')
                 plt.plot(subset['Concurrent_Users'], subset[col], marker='o', linewidth=2, label=container_name)
 
-            plt.title(f"Container CPU Load - {run.capitalize()} ({workload.capitalize()})", fontsize=14, pad=15)
+            plt.title(f"Container {resource_type} Load - {run.capitalize()} ({workload.capitalize()})", fontsize=14, pad=15)
             plt.xlabel("Concurrent Users", fontsize=12)
-            plt.ylabel("Average CPU Utilization (%)", fontsize=12)
-            
-            # Y-axis logic: If they gave it 4 CPUs, it might read up to 400%. 
-            # We let matplotlib auto-scale, but ensure it starts at 0.
+            plt.ylabel(f"Average {resource_type} Utilization (%)", fontsize=12)
             plt.ylim(bottom=0) 
-            
             plt.legend(title="Microservice", bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             
-            # Save the file (e.g., run1_browsing_cpu_load.png)
-            safe_filename = f"{run}_{workload}_cpu_load.png"
+            safe_filename = f"{run}_{workload}_{resource_type.lower()}_load.png"
             plt.savefig(os.path.join(output_dir, safe_filename), dpi=300)
             plt.close()
 
@@ -178,7 +209,10 @@ def main():
     generate_network_visualizations(df, results_dir)
     
     print("🎨 Generating Container Resource PNGs (CPU Load)...")
-    generate_cpu_visualizations(df, results_dir)
+    generate_resource_visualizations(df, results_dir, 'CPU')
+    
+    print("🎨 Generating Container Resource PNGs (Memory Load)...")
+    generate_resource_visualizations(df, results_dir, 'Memory')
     
     print(f"✅ All visualizations saved to: {results_dir}")
 
