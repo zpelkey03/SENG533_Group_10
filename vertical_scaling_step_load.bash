@@ -24,35 +24,33 @@ classes=("browsing" "selection" "transaction" "recommendation")
 # THE STEPS: Number of concurrent users
 user_steps=(20 40 60 80 100)
 
-for exp in "${experiments[@]}"; do
-    read run cpu mem <<< "$exp"
 
-    echo "--- CONFIGURING HARDWARE: $run ($cpu CPUs, $mem RAM) ---"
-    ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "docker update --cpus $cpu --memory $mem deployment-registry-1 deployment-webui-1 deployment-persistence-1 deployment-auth-1 deployment-image-1 deployment-recommender-1"
+echo "--- CONFIGURING HARDWARE: $run ($cpu CPUs, $mem RAM) ---"
+# ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "docker update --cpus $cpu --memory $mem deployment-registry-1 deployment-webui-1 deployment-persistence-1 deployment-auth-1 deployment-image-1 deployment-recommender-1"
 
-    for class in "${classes[@]}"; do
-        for users in "${user_steps[@]}"; do
-            echo "TESTING: $run | CLASS: $class | USERS: $users"
-	    
-	    PREFIX="${run}_${class}_U${users}"
-            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "nohup ~/SENG533_Group_10/monitor.sh docker_stats_${PREFIX}.csv </dev/null >/dev/null 2>&1 &"
+for class in "${classes[@]}"; do
+    for users in "${user_steps[@]}"; do
+        echo "TESTING: $run | CLASS: $class | USERS: $users"
+    
+    PREFIX="${run}_${class}_U${users}"
+        ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "nohup ~/SENG533_Group_10/monitor.sh docker_stats_${PREFIX}.csv </dev/null >/dev/null 2>&1 &"
 
-            # Use -l to create a unique log for EVERY step
-            $JMETER_PATH -n -t class_${class}.jmx \
-                -Jhostname=$CYBERA_IP \
-                -JnumUser=$users \
-                -JrampUp=10 \
-                -Jduration=$DURATION \
-		-Jport=8080 \
-                -l ./results/jmeter_results_${run}_${class}_U${users}.jtl
+        # Use -l to create a unique log for EVERY step
+        $JMETER_PATH -n -t class_${class}.jmx \
+            -Jhostname=$CYBERA_IP \
+            -JnumUser=$users \
+            -JrampUp=10 \
+            -Jduration=$DURATION \
+    -Jport=8080 \
+            -l ./results/jmeter_results_${run}_${class}_U${users}.jtl
 
-            ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "pkill -f monitor.sh"
+        ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "pkill -f monitor.sh"
 
-	    scp -i ~/will_teastore_key.key ubuntu@$CYBERA_IP:~/docker_stats_${PREFIX}.csv ./results/
-	    ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "rm ~/docker_stats_${PREFIX}.csv"
+    scp -i ~/will_teastore_key.key ubuntu@$CYBERA_IP:~/docker_stats_${PREFIX}.csv ./results/
+    ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP "rm ~/docker_stats_${PREFIX}.csv"
 
-            echo "Cooling down..."
-            sleep 20
-        done
+        echo "Cooling down..."
+        sleep 20
     done
 done
+
