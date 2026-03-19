@@ -1,0 +1,15 @@
+timestamp,container,cpu_perc,mem_usage,mem_limit,mem_perc,net_io,block_io,pids
+1773916336,deployment-recommender-1,2.15%,235.4MiB / 1.946GiB,11.81%,7.86MB / 11.5MB,2.94GB / 74.9MB,68
+1773916336,deployment-webui-1,16.21%,498.4MiB / 1.946GiB,25.01%,3.3GB / 3.92GB,6.05GB / 285MB,241
+1773916336,deployment-image-1,9.21%,506.1MiB / 1.946GiB,25.39%,70.5MB / 3.08GB,2.82GB / 114MB,147
+1773916336,deployment-registry-1,1.64%,40.26MiB / 1.946GiB,2.02%,47.6MB / 31.4MB,1.4GB / 58.6MB,50
+1773916336,deployment-db-1,1.33%,7.668MiB / 1.946GiB,0.38%,20.7MB / 91.5MB,227MB / 7.57MB,56
+1773916336,deployment-persistence-1,64.04%,217.6MiB / 1.946GiB,10.92%,155MB / 165MB,2.74GB / 71.9MB,112
+1773916336,deployment-auth-1,5.89%,126.5MiB / 1.946GiB,6.35%,50.6MB / 23.8MB,2.44GB / 55.1MB,73
+1773916358,deployment-recommender-1,0.70%,230.8MiB / 1.946GiB,11.58%,7.88MB / 11.5MB,3.98GB / 99MB,67
+1773916358,deployment-webui-1,0.13%,5.598MiB / 1.946GiB,0.28%,3.38GB / 4.01GB,7.8GB / 310MB,4
+1773916358,deployment-image-1,8.03%,429.2MiB / 1.946GiB,21.54%,72.3MB / 3.15GB,3.87GB / 137MB,59
+1773916358,deployment-registry-1,0.37%,28.07MiB / 1.946GiB,1.41%,47.7MB / 31.5MB,2.08GB / 70.9MB,50
+1773916358,deployment-db-1,0.33%,7.156MiB / 1.946GiB,0.36%,21.2MB / 93.6MB,938MB / 19.2MB,56
+1773916358,deployment-persistence-1,0.42%,270.4MiB / 1.946GiB,13.57%,159MB / 168MB,4GB / 90.5MB,98
+1773916358,deployment-auth-1,0.93%,130.7MiB / 1.946GiB,6.56%,51.7MB / 24.2MB,3.47GB / 72.2MB,53
