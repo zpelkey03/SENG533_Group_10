@@ -1,5 +1,5 @@
 #!/bin/bash
-
+trap 'echo "Script interrupted. Cleaning up tunnels..."; pkill -f "ssh -i.*-L 8080"; exit' INT
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
@@ -7,7 +7,7 @@ LOAD_BALANCER_IP="10.1.3.114"
 # Replaced ~ with $HOME inside quotes to prevent pathing errors
 PEM_KEY="$HOME/Documents/seng-533-ssh/new/new-pk.pem"
 JMETER_PATH="$HOME/Documents/seng-533-ssh/new/jmeter/apache-jmeter-5.6.3/bin/jmeter"
-DURATION=180 
+DURATION=30 
 
 NODE_IPS=("10.1.4.120" "10.1.4.248" "10.1.6.82")
 CLASSES=("browsing" "selection" "transaction" "recommendation")
@@ -17,6 +17,24 @@ mkdir -p ./results
 
 echo "Opening SSH Tunnel to Load Balancer..."
 ssh -i "$PEM_KEY" -f -N -L 8080:127.0.0.1:80 ubuntu@$LOAD_BALANCER_IP
+
+for ip in "${NODE_IPS[@]}"; do
+    echo "Updating and fixing monitor.sh on $ip..."
+    
+    # 1. Make sure the target folder exists
+    ssh -i "$PEM_KEY" ubuntu@$ip "mkdir -p ~/SENG533_Group_10"
+    
+    # 2. Upload the script to both locations
+    scp -i "$PEM_KEY" ./monitor.sh ubuntu@$ip:~/SENG533_Group_10/
+    scp -i "$PEM_KEY" ./monitor.sh ubuntu@$ip:~/
+    
+    # 3. Make them both executable
+    ssh -i "$PEM_KEY" ubuntu@$ip "chmod +x ~/SENG533_Group_10/monitor.sh ~/monitor.sh 2>/dev/null"
+done
+
+echo "All nodes updated and fully prepped!"
+
+
 # ==========================================
 # 2. THE NODE LOOP (1, then 2, then 3 Nodes)
 # ==========================================
