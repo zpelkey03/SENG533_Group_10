@@ -15,6 +15,8 @@ USER_STEPS=(20 40 60 80 100)
 
 mkdir -p ./results
 
+echo "Opening SSH Tunnel to Load Balancer..."
+ssh -i "$PEM_KEY" -f -N -L 8080:127.0.0.1:80 ubuntu@$LOAD_BALANCER_IP
 # ==========================================
 # 2. THE NODE LOOP (1, then 2, then 3 Nodes)
 # ==========================================
@@ -100,7 +102,7 @@ EOF
 
             # Run JMeter against the Load Balancer IP
             "$JMETER_PATH" -n -t class_${class}.jmx \
-                -Jhostname=$LOAD_BALANCER_IP \
+                -Jhostname=127.0.0.1 \
                 -JnumUser=$users \
                 -JrampUp=10 \
                 -Jduration=$DURATION \
@@ -123,4 +125,7 @@ done
 
 # Cleanup
 rm ./temp_haproxy.cfg
+
+echo "Closing SSH Tunnel..."
+pkill -f "ssh -i $PEM_KEY -f -N -L 8080:127.0.0.1:80"
 echo "All testing complete!"
