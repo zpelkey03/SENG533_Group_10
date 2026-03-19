@@ -7,10 +7,12 @@ LOAD_BALANCER_IP="10.1.3.114"
 # Replaced ~ with $HOME inside quotes to prevent pathing errors
 PEM_KEY="$HOME/Documents/seng-533-ssh/new/new-pk.pem"
 JMETER_PATH="$HOME/Documents/seng-533-ssh/new/jmeter/apache-jmeter-5.6.3/bin/jmeter"
-DURATION=30 
+DURATION=180 
 
 NODE_IPS=("10.1.4.120" "10.1.4.248" "10.1.6.82")
-CLASSES=("browsing" "selection" "transaction" "recommendation")
+CLASSES_1=("browsing" "selection")
+CLASSES_2=("transaction" "recommendation")
+CLASSES=("transaction" "recommendation") #class2
 USER_STEPS=(20 40 60 80 100)
 
 mkdir -p ./results
@@ -38,7 +40,7 @@ echo "All nodes updated and fully prepped!"
 # ==========================================
 # 2. THE NODE LOOP (1, then 2, then 3 Nodes)
 # ==========================================
-for num_nodes in {1..3}; do
+for num_nodes in 3 2 1; do
     echo "=================================================="
     echo " CONFIGURING HAPROXY FOR $num_nodes NODE(S)"
     echo "=================================================="
@@ -88,11 +90,13 @@ frontend rgw-https
 backend rgw
     balance roundrobin
     mode http
+    # This inserts a cookie to tie the user to a specific node
+    cookie SERVERID insert indirect nocache
 EOF
 
     # Step B: Dynamically add the correct number of backend servers
     for (( j=0; j<$num_nodes; j++ )); do
-        echo "    server node$((j+1)) ${NODE_IPS[$j]}:8080 check" >> ./temp_haproxy.cfg
+        echo "    server node$((j+1)) ${NODE_IPS[$j]}:8080 check cookie node$((j+1))" >> ./temp_haproxy.cfg
     done
 
     # Step C: Upload config and restart HAProxy
@@ -136,7 +140,7 @@ EOF
             done
 
             echo "Cooling down..."
-            sleep 20
+            sleep 50
         done
     done
 done
