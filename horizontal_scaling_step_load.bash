@@ -5,14 +5,15 @@ trap 'echo "Script interrupted. Cleaning up..."; exit' INT
 # 1. CONFIGURATION
 # ==========================================
 LOAD_BALANCER_IP="10.1.3.114"
-PEM_KEY="$HOME/Documents/seng-533-ssh/new/new-pk.pem"
-JMETER_PATH="$HOME/Documents/seng-533-ssh/new/jmeter/apache-jmeter-5.6.3/bin/jmeter"
+
+PEM_KEY="$HOME/new-pk.pem"
+JMETER_PATH="$HOME/apache-jmeter-5.6.3/bin/jmeter"
 
 # Test variables
 WARMUP_DURATION=30
 DURATION=180
 NODE_IPS=("10.1.4.120" "10.1.4.248")
-CLASSES=("transaction" "recommendation")
+CLASSES=("browsing" "selection" "transaction" "recommendation")
 USER_STEPS=(20 40 60 80 100)
 
 mkdir -p ./results
@@ -30,6 +31,10 @@ echo "Nodes prepped!"
 # 2. THE NODE LOOP (1, then 2, then 3 Nodes)
 # ==========================================
 for num_nodes in 1 2; do
+# This loop kills ghost containers on every machine in your list
+    for ip in "${NODE_IPS[@]}"; do
+        ssh -i "$PEM_KEY" ubuntu@$ip "cd ~/SENG533_Group_10/deployment && sudo docker compose -f docker-compose_default.yaml down>/dev/null 2>&1"
+    done
     echo "=================================================="
     echo " CONFIGURING HAPROXY FOR $num_nodes NODE(S)"
     echo "=================================================="
@@ -76,7 +81,7 @@ EOF
     ssh -i "$PEM_KEY" ubuntu@$LOAD_BALANCER_IP "sudo mv ~/haproxy.cfg /etc/haproxy/haproxy.cfg && sudo systemctl restart haproxy"
     
     echo "HAProxy restarted. Waiting 5 seconds..."
-    sleep 5
+    sleep 10
 
     # ==========================================
     # 3. THE JMETER & MONITORING LOOPS
@@ -93,10 +98,21 @@ EOF
             for (( k=0; k<$num_nodes; k++ )); do
                 CURRENT_NODE="${NODE_IPS[$k]}"
                 # Note: Adjust the docker restart command if you only want to restart specific containers
-                ssh -i "$PEM_KEY" ubuntu@$CURRENT_NODE "sudo docker restart \$(sudo docker ps -q) >/dev/null 2>&1"
+                ssh -i "$PEM_KEY" ubuntu@$CURRENT_NODE "cd ~/SENG533_Group_10/deployment && sudo docker compose -f docker-compose_default.yaml up --build --force-recreate -d >/dev/null 2>&1"
+                echo "Waiting for WebUI to respond with 200 OK..."
             done
-            sleep 10 # Give applications time to boot up
-
+            echo "Waiting for all $num_nodes active WebUI(s) to respond with 200 OK..."
+            for (( k=0; k<$num_nodes; k++ )); do
+                ACTIVE_IP="${NODE_IPS[$k]}"
+                echo "Checking Node $((k+1)) ($ACTIVE_IP)..."
+                # We use a subshell to run the timeout check for each specific node
+                timeout 300s bash -c "until curl -s -o /dev/null -w '%{http_code}' http://$ACTIVE_IP:8080/tools.descartes.teastore.webui/ | grep -q '200'; do sleep 5; done"
+                if [ $? -ne 0 ]; then
+                    echo "Node $ACTIVE_IP failed to become healthy in time. Aborting test."
+                    exit 1
+                fi
+            done
+            echo "All active nodes are healthy!"
             # WARM UP PHASE: Send silent traffic to build caches
             echo "Warming up application caches for $WARMUP_DURATION seconds..."
             "$JMETER_PATH" -n -t class_${class}.jmx \
