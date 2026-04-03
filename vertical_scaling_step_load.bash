@@ -7,6 +7,17 @@ SSH="ssh -i ~/will_teastore_key.key ubuntu@$CYBERA_IP"
 
 mkdir -p ./results
 
+# Auto-detect the docker systemd service name on the performance VM once at startup.
+# Docker may be installed as "docker.service" (apt) or "snap.docker.dockerd.service" (snap), etc.
+echo "Detecting docker service name on $CYBERA_IP..."
+DOCKER_SVC=$($SSH "systemctl list-units --type=service --state=running 2>/dev/null \
+    | awk '{print \$1}' | grep -i docker | grep -iv containerd | head -1")
+if [ -z "$DOCKER_SVC" ]; then
+    echo "ERROR: No running docker systemd service found on $CYBERA_IP. Cannot apply RAM limits. Aborting."
+    exit 1
+fi
+echo "  Found docker service: $DOCKER_SVC"
+
 # Limit CPU cores at the VM level by taking cores offline via the Linux kernel.
 # CPU0 cannot be offlined (it's the boot CPU), so we always keep it.
 # For N CPUs: keep cpu0..cpu(N-1) online, offline the rest.
@@ -34,7 +45,7 @@ configure_ram() {
     local mem_limit
     mem_limit="${1^^}"  # "4g" -> "4G" (systemd unit suffix)
     echo "  Setting Docker service memory limit to $mem_limit..."
-    $SSH "sudo systemctl set-property --runtime docker.service MemoryMax=$mem_limit"
+    $SSH "sudo systemctl set-property --runtime $DOCKER_SVC MemoryMax=$mem_limit"
 }
 
 # Bring all CPUs back online and remove the memory cap after the experiment.
@@ -45,7 +56,7 @@ restore_resources() {
         for i in \$(seq 1 \$((total - 1))); do
             echo 1 | sudo tee /sys/devices/system/cpu/cpu\${i}/online > /dev/null
         done
-        sudo systemctl set-property --runtime docker.service MemoryMax=infinity
+        sudo systemctl set-property --runtime $DOCKER_SVC MemoryMax=infinity
         echo \"  Restored. Active CPUs: \$(nproc)\"
     "
 }
