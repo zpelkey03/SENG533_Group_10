@@ -77,7 +77,7 @@ experiments=(
 classes=("browsing" "selection" "transaction" "recommendation")
 
 # THE STEPS: Number of concurrent users
-user_steps=(20 40 60 80 100)
+user_steps=(5 10)
 
 for exp in "${experiments[@]}"; do
     read run cpu mem <<< "$exp"
