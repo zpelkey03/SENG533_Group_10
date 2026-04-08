@@ -18,47 +18,39 @@ if [ -z "$DOCKER_SVC" ]; then
 fi
 echo "  Found docker service: $DOCKER_SVC"
 
-# Limit CPU cores at the VM level by taking cores offline via the Linux kernel.
-# CPU0 cannot be offlined (it's the boot CPU), so we always keep it.
-# For N CPUs: keep cpu0..cpu(N-1) online, offline the rest.
-configure_cpus() {
-    local cpu_count
-    cpu_count=$(printf "%.0f" "$1")  # convert "2.0" -> 2
-    echo "  Setting VM CPU cores to $cpu_count..."
-    $SSH "
-        total=\$(nproc --all)
-        for i in \$(seq 1 \$((total - 1))); do
-            if [ \$i -lt $cpu_count ]; then
-                echo 1 | sudo tee /sys/devices/system/cpu/cpu\${i}/online > /dev/null
-            else
-                echo 0 | sudo tee /sys/devices/system/cpu/cpu\${i}/online > /dev/null
-            fi
-        done
-        echo \"  Active CPUs: \$(nproc)\"
-    "
+# Limit total resources at the VM level by capping the Docker systemd service.
+configure_hardware() {
+    local cpu_val="$1"
+    local mem_limit="${2^^}"
+    
+    local cpuset=""
+    
+    if [ "$cpu_val" == "1.0" ]; then 
+        cpuset="0"
+    elif [ "$cpu_val" == "2.0" ]; then 
+        cpuset="0-1"
+    elif [ "$cpu_val" == "3.0" ]; then 
+        cpuset="0-2"
+    elif [ "$cpu_val" == "4.0" ]; then 
+        cpuset="0-3"
+    fi
+
+    echo "  Setting Global Docker Limits -> CPU: $cpu_val | RAM: $mem_limit | CPUSET: $cpuset"
+    
+    # Just pin containers to allowed CPUs and set memory limit
+    $SSH "docker update --cpuset-cpus='$cpuset' --memory $mem_limit \
+        deployment_webui_1 deployment_image_1 deployment_recommender_1 \
+        deployment_auth_1 deployment_persistence_1 deployment_registry_1 \
+        deployment_db_1 >/dev/null 2>&1"
 }
 
-# Limit total RAM at the VM level by setting MemoryMax on the docker systemd
-# service cgroup (cgroup v2). This caps ALL containers combined, not per-container.
-# --runtime means the limit is not persisted across reboots.
-configure_ram() {
-    local mem_limit
-    mem_limit="${1^^}"  # "4g" -> "4G" (systemd unit suffix)
-    echo "  Setting Docker service memory limit to $mem_limit..."
-    $SSH "sudo systemctl set-property --runtime $DOCKER_SVC MemoryMax=$mem_limit"
-}
-
-# Bring all CPUs back online and remove the memory cap after the experiment.
 restore_resources() {
     echo "--- Restoring all VM resources ---"
-    $SSH "
-        total=\$(nproc --all)
-        for i in \$(seq 1 \$((total - 1))); do
-            echo 1 | sudo tee /sys/devices/system/cpu/cpu\${i}/online > /dev/null
-        done
-        sudo systemctl set-property --runtime $DOCKER_SVC MemoryMax=infinity
-        echo \"  Restored. Active CPUs: \$(nproc)\"
-    "
+    $SSH "docker update --cpuset-cpus='0-3' --memory 0 \
+        deployment_webui_1 deployment_image_1 deployment_recommender_1 \
+        deployment_auth_1 deployment_persistence_1 deployment_registry_1 \
+        deployment_db_1 >/dev/null 2>&1"
+    echo "  Restored Docker limits to unlimited."
 }
 
 # Phase 1: Vertical Scaling Matrix
@@ -77,15 +69,31 @@ experiments=(
 classes=("browsing" "selection" "transaction" "recommendation")
 
 # THE STEPS: Number of concurrent users
-user_steps=(5 10)
+user_steps=(5 10 20 40 60 80 100)
 
 for exp in "${experiments[@]}"; do
     read run cpu mem <<< "$exp"
 
     echo "--- CONFIGURING HARDWARE: $run ($cpu CPUs, $mem RAM) ---"
-    configure_cpus "$cpu"
-    configure_ram "$mem"
-    sleep 5  # let the kernel settle before starting load
+    configure_hardware "$cpu" "$mem"
+
+    echo "  Restarting TeaStore containers to apply new hardware topology..."
+    $SSH "docker restart deployment_image_1  deployment_recommender_1 deployment_registry_1 deployment_persistence_1 deployment_webui_1 deployment_auth_1 deployment_db_1 >/dev/null"
+
+    echo "  Waiting for TeaStore WebUI to finish booting (this may take a while on 4GB runs)..."
+    
+    until curl -s -f "http://$CYBERA_IP:8080/tools.descartes.teastore.webui/" > /dev/null; do
+        echo "    Still booting... waiting 5 seconds."
+        sleep 5
+    done
+    
+    echo "  TeaStore is UP! Running Warm-up sequence to pre-heat database connections..."
+    for i in {1..10}; do
+        curl -s "http://$CYBERA_IP:8080/tools.descartes.teastore.webui/category?category=2" > /dev/null
+    done
+    
+    echo "  Warm-up complete. Giving JVMs 10 seconds to stabilize before load test..."
+    sleep 10
 
     for class in "${classes[@]}"; do
         for users in "${user_steps[@]}"; do
