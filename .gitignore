@@ -423,4 +423,5 @@ FodyWeavers.xsd
 *.jtl
 *.tmp
 
+results.*/*
 results/*
