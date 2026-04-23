@@ -1,10 +1,8 @@
 #!/bin/bash
 trap 'echo "Script interrupted. Cleaning up..."; exit' INT
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
-LOAD_BALANCER_IP="10.1.3.114"
+# Configuration
+LOAD_BALANCER_IP="10.1.3.114" # IP of the loadbalancer node
 
 PEM_KEY="$HOME/new-pk.pem"
 JMETER_PATH="$HOME/apache-jmeter-5.6.3/bin/jmeter"
@@ -12,12 +10,13 @@ JMETER_PATH="$HOME/apache-jmeter-5.6.3/bin/jmeter"
 # Test variables
 WARMUP_DURATION=30
 DURATION=180
-NODE_IPS=("10.1.4.120" "10.1.4.248")
-CLASSES=("browsing" "selection" "transaction" "recommendation")
-USER_STEPS=(20 40 60 80 100)
+NODE_IPS=("10.1.4.120" "10.1.4.248" "10.1.3.149") # IPs of nodes hosting Tea Store
+CLASSES=("browsing" "selection" "transaction" "recommendation") # Jmeter classes being tested
+USER_STEPS=(20 40 60 80 100) # user amounts to test the application
 
 mkdir -p ./results
 
+# Set up the monitor.sh script on all nodes
 echo "Prepping all backend nodes..."
 for ip in "${NODE_IPS[@]}"; do
     ssh -i "$PEM_KEY" ubuntu@$ip "mkdir -p ~/SENG533_Group_10"
@@ -27,11 +26,11 @@ for ip in "${NODE_IPS[@]}"; do
 done
 echo "Nodes prepped!"
 
-# ==========================================
-# 2. THE NODE LOOP (1, then 2, then 3 Nodes)
-# ==========================================
-for num_nodes in 1 2; do
-# This loop kills ghost containers on every machine in your list
+
+# Run the tests with different number of nodes, different user load, and classes
+
+for num_nodes in 1 2 3; do
+# This loop kills ghost containers on every machine in your list, this is to help the application breathe from previous loads
     for ip in "${NODE_IPS[@]}"; do
         ssh -i "$PEM_KEY" ubuntu@$ip "cd ~/SENG533_Group_10/deployment && sudo docker compose -f docker-compose_default.yaml down>/dev/null 2>&1"
     done
@@ -83,9 +82,9 @@ EOF
     echo "HAProxy restarted. Waiting 5 seconds..."
     sleep 10
 
-    # ==========================================
-    # 3. THE JMETER & MONITORING LOOPS
-    # ==========================================
+    # THE JMETER & MONITORING LOOPS
+
+    # For each class, run the jmeter class with different user loads
     for class in "${CLASSES[@]}"; do
         for users in "${USER_STEPS[@]}"; do
             
@@ -101,6 +100,7 @@ EOF
                 ssh -i "$PEM_KEY" ubuntu@$CURRENT_NODE "cd ~/SENG533_Group_10/deployment && sudo docker compose -f docker-compose_default.yaml up --build --force-recreate -d >/dev/null 2>&1"
                 echo "Waiting for WebUI to respond with 200 OK..."
             done
+            # Wait for all nodes to respond back with ok
             echo "Waiting for all $num_nodes active WebUI(s) to respond with 200 OK..."
             for (( k=0; k<$num_nodes; k++ )); do
                 ACTIVE_IP="${NODE_IPS[$k]}"
