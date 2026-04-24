@@ -3,6 +3,7 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+**/old_res
 # User-specific files
 *.rsuser
 *.suo
@@ -418,10 +419,8 @@ FodyWeavers.xsd
 *.msp
 
 *.key
-*.pub
 
-*.jtl
+# *.jtl
 *.tmp
 
-*/results.*/*
-*/results/*
+results/*
